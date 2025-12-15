@@ -4,8 +4,9 @@
 
 | Resource | Link/Location |
 |----------|---------------|
+| **Live App** | https://llmhumancodeweb-9scksmewtetcjowbyvyjsr.streamlit.app/ |
 | **GitHub Repo** | https://github.com/mat1414/llm_humancode_web |
-| **Streamlit App** | https://share.streamlit.io (deploy from GitHub) |
+| **Streamlit Dashboard** | https://share.streamlit.io |
 | **Local Directory** | `/home/ben/projects/llm_humancode_web` |
 
 ---
@@ -178,7 +179,7 @@ Human coders classify FOMC speaker statements based on whether they express a be
 
 ### Initial Coding Session
 
-1. Go to the Streamlit app URL
+1. Go to https://llmhumancodeweb-9scksmewtetcjowbyvyjsr.streamlit.app/
 2. Enter your name in the sidebar
 3. Select "Use default sample" (200 arguments pre-loaded)
 4. For each argument:
@@ -189,7 +190,7 @@ Human coders classify FOMC speaker statements based on whether they express a be
 
 ### Resuming a Session
 
-1. Go to the Streamlit app URL
+1. Go to https://llmhumancodeweb-9scksmewtetcjowbyvyjsr.streamlit.app/
 2. Enter your name
 3. In "Resume Session" section, upload your previous results CSV
 4. Click "Load Session"
