@@ -11,6 +11,15 @@
 
 ---
 
+## Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v1.1 | 2024-12-15 | Fixed session resume bug (widget_version pattern), added resume CSV validation, locked coder name after first save |
+| v1.0 | 2024-12-14 | Initial release with Phillips curve classification |
+
+---
+
 ## Overview
 
 This project provides a web-based Streamlit interface for human validation of LLM-estimated model parameters from FOMC transcripts, following the Mullainathan et al. (2024) framework for LLM output validation.
