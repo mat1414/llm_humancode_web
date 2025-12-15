@@ -1,12 +1,22 @@
 # Claude Guide: Model Parameter Human Coding Framework
 
+## Quick Reference
+
+| Resource | Link/Location |
+|----------|---------------|
+| **GitHub Repo** | https://github.com/mat1414/llm_humancode_web |
+| **Streamlit App** | https://share.streamlit.io (deploy from GitHub) |
+| **Local Directory** | `/home/ben/projects/llm_humancode_web` |
+
+---
+
 ## Overview
 
-This project provides a web-based interface for human validation of LLM-estimated model parameters from FOMC transcripts, following the Mullainathan et al. (2024) framework for LLM output validation.
+This project provides a web-based Streamlit interface for human validation of LLM-estimated model parameters from FOMC transcripts, following the Mullainathan et al. (2024) framework for LLM output validation.
 
-**Current Implementation**: Phillips Curve Classification validation is complete and ready to use.
+**Current Implementation**: Phillips Curve Classification - LIVE on Streamlit Cloud
 
-**Planned**: Stock Market Wealth Effects classification (to be implemented later).
+**Planned**: Stock Market Wealth Effects classification (to be implemented later)
 
 ---
 
@@ -14,32 +24,123 @@ This project provides a web-based interface for human validation of LLM-estimate
 
 ```
 llm_humancode_web/
-├── coding_interface.py          # Streamlit GUI for Phillips curve coding
+├── coding_interface.py          # Main Streamlit app (deployed to cloud)
 ├── validation_analysis.py       # Cohen's kappa & confusion matrix analysis
 ├── phillips_sampler.py          # Stratified sampler for Phillips curve
 ├── parameter_sampler.py         # Generic template (unused)
+├── requirements.txt             # Python dependencies for Streamlit Cloud
+├── .gitignore                   # Git ignore rules
 ├── CLAUDE_GUIDE.md              # This file
-├── original_scripts/            # Original LLM classification scripts
+├── original_scripts/            # Original LLM classification scripts & data
 │   ├── 07.1_phillips_classication.py    # Claude prompts for Phillips curve
 │   ├── 07.2_stock_market_wealth.py      # Claude prompts for wealth effects
-│   ├── all_arguments.pkl                # Full FOMC arguments dataset
-│   ├── phillips_classifications.pkl     # Claude's Phillips curve classifications
-│   ├── stock_market_wealth_classifications.pkl  # Claude's wealth effect classifications
+│   ├── all_arguments.pkl                # Full FOMC arguments (56MB)
+│   ├── phillips_classifications.pkl     # Claude's Phillips classifications
+│   ├── stock_market_wealth_classifications.pkl
 │   └── wealth_arguments_with_classification.pkl
-├── data/                        # Reference data
-│   └── arguments_with_classification.pkl
 └── validation_samples/
-    ├── production/              # Coding files
-    │   ├── coding_phillips.csv  # For human coders (no Claude classifications)
+    ├── production/              # Coding files for deployment
+    │   ├── coding_phillips.csv  # 200 arguments for human coders
     │   ├── key_phillips.csv     # Validation key (hidden from coders)
     │   └── stats_phillips.json  # Sample statistics
-    └── coded/                   # Human coding outputs
-        └── coded_{coder}_phillips_{timestamp}.csv
+    └── coded/                   # Local storage (not deployed)
 ```
 
 ---
 
-## Phillips Curve Classification
+## Deployment Architecture
+
+### How It Works
+
+1. **Code lives on GitHub**: https://github.com/mat1414/llm_humancode_web
+2. **Streamlit Cloud pulls from GitHub** and deploys automatically
+3. **Coders access the web app** via Streamlit Cloud URL
+4. **Results are downloaded** by coders (cloud filesystem is ephemeral)
+5. **Coders share CSV files** with the research team
+
+### Key Limitation
+
+Streamlit Cloud has an **ephemeral filesystem** - files don't persist between sessions. Therefore:
+- Coders must **download their results CSV** before closing the browser
+- To resume, coders **upload their previous results file**
+- All result CSVs should be collected and stored locally or on Dropbox
+
+---
+
+## Updating the Deployed App
+
+### Step 1: Make Changes Locally
+
+```bash
+cd /home/ben/projects/llm_humancode_web
+
+# Edit files as needed
+# e.g., update coding_interface.py, add new features, etc.
+```
+
+### Step 2: Commit Changes
+
+```bash
+git add -A
+git status  # Review what will be committed
+
+git commit -m "Description of changes"
+```
+
+### Step 3: Push to GitHub
+
+```bash
+git push origin main
+```
+
+### Step 4: Streamlit Auto-Deploys
+
+Streamlit Cloud automatically detects the push and redeploys within ~1-2 minutes. No manual action needed.
+
+### Verify Deployment
+
+1. Go to https://share.streamlit.io
+2. Check your app's status (should show "Running")
+3. Visit the app URL to verify changes
+
+---
+
+## Adding a New Coding Interface (e.g., Stock Market Wealth Effects)
+
+### Option A: Add to Existing App (Multi-page)
+
+1. Create new sampler: `wealth_effects_sampler.py`
+2. Generate sample: `python wealth_effects_sampler.py`
+3. Modify `coding_interface.py` to support both measures (add dropdown to select measure type)
+4. Commit and push
+
+### Option B: Create Separate App
+
+1. Create `coding_interface_wealth.py`
+2. Deploy as separate Streamlit app
+3. In Streamlit Cloud, create new app pointing to the new file
+
+### Steps for Wealth Effects Implementation
+
+```python
+# 1. Create wealth_effects_sampler.py (similar to phillips_sampler.py)
+# Categories: strong, weak, moderate, none
+# Source variables: Growth, Employment, Stock Market, Credit Markets
+
+# 2. Generate sample
+python wealth_effects_sampler.py
+
+# 3. Update coding_interface.py or create new one
+
+# 4. Commit and push
+git add -A
+git commit -m "Add stock market wealth effects coding"
+git push origin main
+```
+
+---
+
+## Phillips Curve Classification Details
 
 ### Task Description
 
@@ -47,8 +148,8 @@ Human coders classify FOMC speaker statements based on whether they express a be
 
 ### Classification Categories
 
-| Category | Numeric Value | Description |
-|----------|---------------|-------------|
+| Category | Numeric | Description |
+|----------|---------|-------------|
 | **STEEP** | 1 | Labor markets SIGNIFICANTLY affect inflation |
 | **FLAT** | -1 | Labor markets have LITTLE/NO effect on inflation |
 | **MODERATE** | 0 | Qualified/partial relationship |
@@ -56,247 +157,209 @@ Human coders classify FOMC speaker statements based on whether they express a be
 
 ### Context Shown to Coders
 
-For each argument, coders see:
 - **Quotation**: Direct quote from FOMC transcript
 - **Description**: Short summary of the argument
 - **Explanation**: Policy implication/interpretation
 - **Variable**: Economic variable (Growth, Inflation, or Employment)
 
-Claude's classification is **hidden** from coders during the coding process.
+### Current Sample
 
-### Sample Design
-
-- **Target**: 50 arguments per classification category (200 total)
-- **Stratification**: Equal representation of steep, flat, moderate, none
-- **Source**: 82,770 arguments from FOMC transcripts (Growth, Inflation, Employment)
-
-### Claude's Classification Distribution (Full Dataset)
-
-| Category | Count | Percentage |
-|----------|-------|------------|
-| None | 76,320 | 92.2% |
-| Steep | 4,254 | 5.1% |
-| Flat | 1,730 | 2.1% |
-| Moderate | 465 | 0.6% |
+| Category | Sampled | Available in Full Dataset |
+|----------|---------|---------------------------|
+| Steep | 50 | 5,651 |
+| Flat | 50 | 1,753 |
+| Moderate | 50 | 864 |
+| None | 50 | 74,501 |
+| **Total** | **200** | 82,769 |
 
 ---
 
-## Workflow
+## Workflow for Coders
 
-### Step 1: Generate Coding Sample (Already Done)
+### Initial Coding Session
+
+1. Go to the Streamlit app URL
+2. Enter your name in the sidebar
+3. Select "Use default sample" (200 arguments pre-loaded)
+4. For each argument:
+   - Read quotation, description, explanation
+   - Select classification (steep/flat/moderate/none)
+   - Click "Save & Continue"
+5. **Important**: Click "Download Results CSV" before closing browser
+
+### Resuming a Session
+
+1. Go to the Streamlit app URL
+2. Enter your name
+3. In "Resume Session" section, upload your previous results CSV
+4. Click "Load Session"
+5. Continue coding from where you left off
+6. Download updated results when done
+
+### Submitting Results
+
+Coders should send their final `coded_{name}_phillips_{timestamp}.csv` file to the research team via email or shared Dropbox folder.
+
+---
+
+## Running Validation Analysis
+
+After collecting all coder results:
+
+### Step 1: Collect Results
+
+Place all `coded_*_phillips_*.csv` files in:
+```
+/home/ben/projects/llm_humancode_web/validation_samples/coded/
+```
+
+### Step 2: Run Analysis
 
 ```bash
 cd /home/ben/projects/llm_humancode_web
-python phillips_sampler.py
+python -c "from validation_analysis import run_validation; run_validation()"
 ```
 
-Output:
-- `validation_samples/production/coding_phillips.csv` - Give to coders
-- `validation_samples/production/key_phillips.csv` - Hidden validation key
+### Output
 
-### Step 2: Human Coding
-
-```bash
-streamlit run coding_interface.py
-```
-
-1. Coder enters their name
-2. Uploads `coding_phillips.csv`
-3. For each argument:
-   - Reads quotation, description, explanation
-   - Selects classification (steep/flat/moderate/none)
-   - Clicks "Save & Continue"
-4. Progress auto-saves to `validation_samples/coded/`
-
-### Step 3: Validation Analysis
-
-After coding is complete:
-
-```python
-from validation_analysis import run_validation
-results = run_validation()
-```
-
-Or run directly:
-```bash
-python validation_analysis.py
-```
-
-**Output metrics**:
-- Overall accuracy
-- Cohen's kappa (unweighted)
-- Cohen's kappa (weighted, ordinal, for non-none categories)
+- Cohen's kappa (unweighted and weighted)
 - Confusion matrix
 - Per-category precision, recall, F1
 - Disagreement analysis
+- `confusion_matrix_phillips.png` visualization
 
 ---
 
-## Claude's Original Prompts
+## Git Commands Reference
 
-### Phillips Curve Prompt (from `07.1_phillips_classication.py`)
-
-The prompt instructs Claude to:
-
-1. **Check for explicit Phillips curve mentions** ("Phillips curve is flat/dead")
-2. **Identify required components**:
-   - Labor market indicators (unemployment, NAIRU, wage pressures, capacity)
-   - Inflation outcomes (price pressures, inflation expectations, PCE)
-3. **Identify causal connection** between the two components
-4. **Classify the relationship type**:
-   - STEEP: Strong causal language ("drives", "causes", "leads to")
-   - FLAT: Disconnection language ("despite", "hasn't translated")
-   - MODERATE: Hedging language ("some", "modest", "limited")
-   - NULL: No belief expressed (default)
-
-**Key rules**:
-- Default to NULL unless clear belief expressed
-- Both components must be present AND causally connected
-- Mere description without interpretation = NULL
-
----
-
-## File Descriptions
-
-### `coding_interface.py`
-Streamlit web application for human coding:
-- Displays argument context (quotation, description, explanation)
-- Radio buttons for classification selection
-- Auto-saves progress after each coding
-- Supports session resumption
-- Shows progress bar
-
-### `validation_analysis.py`
-Analysis module using:
-- `PhillipsValidationAnalyzer` class
-- Cohen's kappa for categorical agreement
-- Weighted kappa for ordinal analysis (steep > moderate > flat)
-- Confusion matrix visualization
-- Disagreement pattern analysis
-
-### `phillips_sampler.py`
-Stratified sampling:
-- Loads `all_arguments.pkl` and `phillips_classifications.pkl`
-- Filters to Growth/Inflation/Employment variables
-- Samples 50 per category
-- Creates blind coding file (no Claude classifications)
-- Creates validation key (with Claude classifications)
-
----
-
-## Data Structures
-
-### Input: `all_arguments.pkl`
-```
-Columns:
-- description: Short summary
-- quotation: Direct quote from FOMC transcript
-- explanation: Policy implication
-- stablespeaker: Speaker identifier
-- ymd: Meeting date (YYYYMMDD)
-- variable: Economic variable (Growth/Inflation/Employment)
-- belief_forecast_cyclical, belief_forecast_trend, etc.
+### Check Status
+```bash
+cd /home/ben/projects/llm_humancode_web
+git status
 ```
 
-### Input: `phillips_classifications.pkl`
-```
-pandas Series indexed by argument row number
-Values: 1.0 (steep), -1.0 (flat), 0.0 (moderate), NaN (null)
+### View Recent Commits
+```bash
+git log --oneline -10
 ```
 
-### Output: `coded_{coder}_phillips_{timestamp}.csv`
+### Pull Latest Changes
+```bash
+git pull origin main
 ```
-Columns:
-- coding_id: Unique identifier (PC_0001, etc.)
-- coder_name: Human coder name
-- classification: steep/flat/moderate/none
-- notes: Optional coder notes
-- coded_at: ISO timestamp
+
+### Push Updates
+```bash
+git add -A
+git commit -m "Your message"
+git push origin main
+```
+
+### Discard Local Changes
+```bash
+git checkout -- filename.py  # Specific file
+git checkout -- .            # All files
 ```
 
 ---
 
-## Validation Metrics
+## Regenerating the Coding Sample
 
-### Cohen's Kappa Interpretation
+If you need a new random sample:
 
-| Kappa Range | Interpretation |
-|-------------|----------------|
-| < 0 | Less than chance |
-| 0.00-0.20 | Slight agreement |
-| 0.21-0.40 | Fair agreement |
-| 0.41-0.60 | Moderate agreement |
-| 0.61-0.80 | Substantial agreement |
-| 0.81-1.00 | Almost perfect agreement |
+```bash
+cd /home/ben/projects/llm_humancode_web
 
-### Weighted Kappa
+# Edit phillips_sampler.py to change seed or sample size if needed
 
-For the ordinal categories (steep > moderate > flat), weighted kappa accounts for the severity of disagreements:
-- steep vs flat = worst disagreement
-- steep vs moderate = moderate disagreement
-- moderate vs flat = moderate disagreement
+python phillips_sampler.py
+
+# Commit and push new sample
+git add validation_samples/production/
+git commit -m "Regenerate Phillips curve sample"
+git push origin main
+```
+
+---
+
+## Troubleshooting
+
+### App Not Updating After Push
+
+1. Check Streamlit Cloud dashboard for deployment status
+2. May take 1-2 minutes to redeploy
+3. Try hard refresh (Ctrl+Shift+R) in browser
+
+### Large File Push Errors
+
+```bash
+git config http.postBuffer 524288000
+git push origin main
+```
+
+### Coder Lost Their Progress
+
+- If they downloaded a results CSV previously, they can upload it to resume
+- If no download exists, they need to start over (this is why downloading is important!)
+
+### Import Errors on Streamlit Cloud
+
+Check `requirements.txt` has all needed packages:
+```
+streamlit>=1.24.0
+pandas>=1.5.0
+numpy>=1.23.0
+scikit-learn>=1.2.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+```
+
+---
+
+## Data Files Reference
+
+### Source Data
+
+| File | Size | Contents |
+|------|------|----------|
+| `all_arguments.pkl` | 56MB | 102,419 FOMC arguments |
+| `phillips_classifications.pkl` | 1.9MB | Claude's Phillips classifications |
+| `stock_market_wealth_classifications.pkl` | 1.8MB | Claude's wealth effect classifications |
+
+### Generated Files
+
+| File | Contents |
+|------|----------|
+| `coding_phillips.csv` | 200 arguments for human coders (no Claude labels) |
+| `key_phillips.csv` | Validation key with Claude's classifications |
+| `stats_phillips.json` | Sample statistics |
 
 ---
 
 ## Future: Stock Market Wealth Effects
 
-**Status**: Not yet implemented
+**Status**: Data available, interface not yet built
 
 **Classification Categories** (planned):
-- STRONG: Stock markets significantly affect consumption/economy
-- WEAK: Stock markets have little/no effect
-- MODERATE: Qualified/partial relationship
-- NONE: No wealth effect belief expressed
+| Category | Numeric | Description |
+|----------|---------|-------------|
+| STRONG | 1 | Stock markets significantly affect consumption/economy |
+| WEAK | -1 | Stock markets have little/no effect |
+| MODERATE | 0 | Qualified/partial relationship |
+| NONE | NaN | No wealth effect belief expressed |
 
-**Data**:
-- `stock_market_wealth_classifications.pkl` available
-- Covers Growth, Employment, Stock Market, Credit Markets variables
+**Source Variables**: Growth, Employment, Stock Market, Credit Markets
 
-**To implement**:
-1. Create `wealth_effects_sampler.py`
-2. Update `coding_interface.py` or create separate interface
-3. Adapt `validation_analysis.py` for wealth effect categories
+**To implement**: Follow the same pattern as Phillips curve - create sampler, update/create interface, deploy.
 
 ---
 
-## Quick Reference
+## Contact & Context
 
-### Run Coding Interface
-```bash
-cd /home/ben/projects/llm_humancode_web
-streamlit run coding_interface.py
-```
+This project is part of a larger research effort involving FOMC transcript analysis. The validation framework ensures that LLM-estimated parameters can be used reliably in academic research by quantifying and correcting any systematic biases.
 
-### Generate New Sample
-```bash
-python phillips_sampler.py
-```
+### Related Projects
 
-### Run Validation Analysis
-```bash
-python -c "from validation_analysis import run_validation; run_validation()"
-```
-
-### Required Packages
-```
-streamlit
-pandas
-numpy
-scipy
-scikit-learn
-matplotlib
-seaborn
-```
-
----
-
-## Related Projects
-
-### Original FOMC Argument Coding Framework
-Location: `/home/ben/llm_humancode/`
-
-This project validated Claude's argument classifications (scores -3 to +3, argument categories, data categories). The current project adapts that framework for model parameter classifications.
-
-Key differences:
-- Original: Continuous scores + multiple categorical dimensions
-- Current: Single categorical classification (steep/flat/moderate/none)
+- **Original FOMC Argument Coding**: `/home/ben/llm_humancode/`
+- **Model Fit Analysis**: `/home/ben/projects/gdm_parameter_extraction_vf/`
