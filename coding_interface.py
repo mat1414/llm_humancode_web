@@ -10,6 +10,11 @@ Following Mullainathan et al. (2024) framework for LLM output validation.
 
 Usage:
     streamlit run coding_interface.py
+
+Changelog:
+    v1.1 - Fixed session resume widget state bug (widget_version pattern)
+         - Added resume CSV validation
+         - Locked coder name after first save to prevent inconsistencies
 """
 import streamlit as st
 import pandas as pd
@@ -62,21 +67,75 @@ def get_previous_coding(coding_id, results):
     return None
 
 
+def validate_resume_csv(resume_df, coding_df):
+    """
+    Validate that a resume CSV is compatible with the current coding data.
+    
+    Returns:
+        tuple: (is_valid, message, matching_ids)
+    """
+    required_cols = {'coding_id', 'coder_name', 'classification'}
+    if not required_cols.issubset(resume_df.columns):
+        missing = required_cols - set(resume_df.columns)
+        return False, f"Missing required columns: {missing}", set()
+    
+    resume_ids = set(resume_df['coding_id'].tolist())
+    coding_ids = set(coding_df['coding_id'].tolist())
+    
+    matching_ids = resume_ids.intersection(coding_ids)
+    unmatched_ids = resume_ids - coding_ids
+    
+    if len(matching_ids) == 0:
+        return False, "No coding_ids in resume file match current data source", set()
+    
+    if len(unmatched_ids) > 0:
+        return True, f"Warning: {len(unmatched_ids)} coding_ids in resume file not found in current data (will be ignored)", matching_ids
+    
+    return True, f"Successfully validated {len(matching_ids)} coded arguments", matching_ids
+
+
+def initialize_session_state():
+    """Initialize all session state variables."""
+    if 'current_index' not in st.session_state:
+        st.session_state.current_index = 0
+    if 'results' not in st.session_state:
+        st.session_state.results = []
+    if 'coded_ids' not in st.session_state:
+        st.session_state.coded_ids = set()
+    if 'widget_version' not in st.session_state:
+        st.session_state.widget_version = 0
+    if 'locked_coder_name' not in st.session_state:
+        st.session_state.locked_coder_name = None
+
+
 def main():
     st.title("Phillips Curve Classification")
     st.markdown("**Human Validation of LLM Classifications**")
     st.markdown("---")
+
+    # Initialize session state
+    initialize_session_state()
 
     # Sidebar setup
     with st.sidebar:
         st.header("Setup")
 
         # Coder identification
-        coder_name = st.text_input(
-            "Your Name",
-            placeholder="Enter your name",
-            help="Used to identify your coding results"
-        )
+        # If name is locked (user has saved at least once), show it as locked
+        if st.session_state.locked_coder_name is not None:
+            st.text_input(
+                "Your Name (locked)",
+                value=st.session_state.locked_coder_name,
+                disabled=True,
+                help="Name is locked after first save to ensure consistency"
+            )
+            coder_name = st.session_state.locked_coder_name
+        else:
+            coder_name = st.text_input(
+                "Your Name",
+                placeholder="Enter your name",
+                help="Used to identify your coding results. Will be locked after first save."
+            )
 
         if not coder_name:
             st.warning("Please enter your name to begin")
@@ -115,16 +174,10 @@ def main():
                 st.stop()
 
     total_arguments = len(coding_df)
-
-    # Initialize session state
-    if 'current_index' not in st.session_state:
-        st.session_state.current_index = 0
-    if 'results' not in st.session_state:
-        st.session_state.results = []
-    if 'coded_ids' not in st.session_state:
-        st.session_state.coded_ids = set()
-
     current_index = st.session_state.current_index
+    
+    # Get current widget version for keying
+    v = st.session_state.widget_version
 
     # Progress tracking in sidebar
     with st.sidebar:
@@ -143,7 +196,8 @@ def main():
 
         if st.session_state.results:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"coded_{coder_name.lower()}_phillips_{timestamp}.csv"
+            safe_name = coder_name.lower().replace(' ', '_')
+            filename = f"coded_{safe_name}_phillips_{timestamp}.csv"
 
             st.download_button(
                 label="📥 Download Results CSV",
@@ -171,19 +225,46 @@ def main():
             if st.button("Load Session"):
                 try:
                     resume_df = pd.read_csv(resume_file)
-                    st.session_state.results = resume_df.to_dict('records')
-                    st.session_state.coded_ids = set(resume_df['coding_id'].tolist())
-
-                    # Jump to first uncoded
-                    for idx in range(len(coding_df)):
-                        if coding_df.iloc[idx]['coding_id'] not in st.session_state.coded_ids:
-                            st.session_state.current_index = idx
-                            break
+                    
+                    # Validate the resume CSV
+                    is_valid, message, matching_ids = validate_resume_csv(resume_df, coding_df)
+                    
+                    if not is_valid:
+                        st.error(f"Cannot load session: {message}")
                     else:
-                        st.session_state.current_index = len(coding_df) - 1
+                        if "Warning" in message:
+                            st.warning(message)
+                        
+                        # Filter to only matching IDs
+                        valid_results = resume_df[resume_df['coding_id'].isin(matching_ids)].to_dict('records')
+                        
+                        st.session_state.results = valid_results
+                        st.session_state.coded_ids = set(r['coding_id'] for r in valid_results)
+                        
+                        # Lock the coder name from the resume file
+                        if len(valid_results) > 0:
+                            st.session_state.locked_coder_name = valid_results[0].get('coder_name', coder_name)
+                        
+                        # INCREMENT WIDGET VERSION to force fresh widget state
+                        # This is critical - without this, widgets show cached values
+                        # instead of values from the loaded CSV
+                        st.session_state.widget_version += 1
 
-                    st.success(f"Loaded {len(st.session_state.results)} coded arguments")
-                    st.rerun()
+                        # Jump to first uncoded argument
+                        found_uncoded = False
+                        for idx in range(len(coding_df)):
+                            if coding_df.iloc[idx]['coding_id'] not in st.session_state.coded_ids:
+                                st.session_state.current_index = idx
+                                found_uncoded = True
+                                break
+                        
+                        if not found_uncoded:
+                            # All are coded, go to last one
+                            st.session_state.current_index = len(coding_df) - 1
+
+                        st.success(f"Loaded {len(valid_results)} coded arguments")
+                        st.rerun()
+                        
                 except Exception as e:
                     st.error(f"Error loading session: {e}")
 
@@ -266,22 +347,31 @@ def main():
                 if prev_cat in categories:
                     default_idx = categories.index(prev_cat)
 
+            # IMPORTANT: Widget key includes version number
+            # This forces Streamlit to create a fresh widget after session resume,
+            # using the index/value parameters instead of cached state
             classification = st.radio(
                 "Select classification:",
                 options=categories,
                 format_func=lambda x: category_labels[x],
                 index=default_idx,
-                key=f"classification_{current_index}"
+                key=f"classification_{current_index}_v{v}"
             )
 
             # Optional notes
             st.markdown("---")
-            notes_val = previous_coding.get('notes', '') if previous_coding else ''
+            notes_default = ''
+            if previous_coding:
+                notes_val = previous_coding.get('notes', '')
+                if isinstance(notes_val, str) and pd.notna(notes_val):
+                    notes_default = notes_val
+            
+            # IMPORTANT: Widget key includes version number
             notes = st.text_area(
                 "Notes (optional):",
-                value=notes_val if isinstance(notes_val, str) and pd.notna(notes_val) else '',
+                value=notes_default,
                 max_chars=500,
-                key=f"notes_{current_index}",
+                key=f"notes_{current_index}_v{v}",
                 help="Any observations or issues with this argument"
             )
 
@@ -325,9 +415,13 @@ def main():
 
         with col_save:
             if st.button("💾 Save & Continue", type="primary", use_container_width=True):
+                # Lock coder name on first save
+                if st.session_state.locked_coder_name is None:
+                    st.session_state.locked_coder_name = coder_name
+                
                 result = {
                     'coding_id': coding_id,
-                    'coder_name': coder_name,
+                    'coder_name': st.session_state.locked_coder_name,
                     'classification': classification,
                     'notes': notes,
                     'coded_at': datetime.now().isoformat()
@@ -360,13 +454,14 @@ def main():
                 st.rerun()
 
         with col_jump:
+            # IMPORTANT: Widget key includes version number
             jump_to = st.number_input(
                 "Jump to:",
                 min_value=1,
                 max_value=total_arguments,
                 value=current_index + 1,
                 step=1,
-                key=f"jump_{current_index}"
+                key=f"jump_{current_index}_v{v}"
             )
             if st.button("Go", use_container_width=True):
                 st.session_state.current_index = jump_to - 1
@@ -378,7 +473,8 @@ def main():
 
         st.markdown("### Download your results:")
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"coded_{coder_name.lower()}_phillips_{timestamp}.csv"
+        safe_name = coder_name.lower().replace(' ', '_')
+        filename = f"coded_{safe_name}_phillips_{timestamp}.csv"
 
         st.download_button(
             label="📥 Download Results CSV",
