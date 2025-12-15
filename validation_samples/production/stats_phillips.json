@@ -1,0 +1,16 @@
+{
+  "n_arguments": 200,
+  "category_distribution": {
+    "steep": 50,
+    "moderate": 50,
+    "flat": 50,
+    "none": 50
+  },
+  "variable_distribution": {
+    "Inflation": 84,
+    "Employment": 80,
+    "Growth": 36
+  },
+  "created_at": "2025-12-14T23:48:41.969676",
+  "seed": 42
+}

@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Local coding results (coders download these instead)
+validation_samples/coded/
+
+# Large reference data (not needed for deployment)
+data/
+
+# Temporary files
+*.tmp
+*.log
